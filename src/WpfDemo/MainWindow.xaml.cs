@@ -1,5 +1,5 @@
 ﻿//
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2019 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 
 using System;
 using System.Windows;
+using Veldrid.SceneGraph;
+using Veldrid.SceneGraph.InputAdapter;
 
 namespace WpfDemo
 {
@@ -24,10 +26,43 @@ namespace WpfDemo
     /// </summary>
     public partial class MainWindow
     {
+        private MainWindowViewModel _viewModel;
+        private bool _isOrthoGraphic = false;
+        
         public MainWindow()
         {
             InitializeComponent();
-            DataContext = new MainWindowViewModel();
+            _viewModel = new MainWindowViewModel();
+            DataContext = _viewModel;
+        }
+
+        private void ChangeCameraButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            var camera = VSGElement.GetCamera();
+            
+            var width = camera.Width;
+            var height = camera.Height;
+            var dist = camera.Distance;
+            if (!_isOrthoGraphic)
+            {
+                _viewModel.SetCameraOrthographic(VSGElement.GetUiActionAdapter(), VSGElement.GetCamera());//OrthographicCameraOperations.ConvertFromPerspectiveToOrthographic(VSGElement.GetCamera()));
+                _isOrthoGraphic = true;
+            }
+            else
+            {
+                _viewModel.SetCameraPerspective(VSGElement.GetUiActionAdapter(), VSGElement.GetCamera());//PerspectiveCameraOperations.ConvertFromOrthographicToPerspective(VSGElement.GetCamera()));
+                _isOrthoGraphic = false;
+            }
+        }
+        
+        private void ChangeCameraViewButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            _viewModel.ChangeCamera(VSGElement.GetUiActionAdapter(), VSGElement.GetCamera());
+        }
+
+        private void ViewAllButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            VSGElement.CameraManipulator.ViewAll(VSGElement.GetUiActionAdapter());
         }
     }
 }

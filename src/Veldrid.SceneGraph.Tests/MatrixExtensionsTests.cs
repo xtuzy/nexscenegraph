@@ -1,5 +1,5 @@
 //
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2021 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ using System.Linq;
 using System.Numerics;
 using NUnit.Framework;
 using Veldrid.SceneGraph.Util;
+
 namespace Veldrid.SceneGraph.Tests
 {
     [TestFixture]
@@ -34,15 +35,15 @@ namespace Veldrid.SceneGraph.Tests
         public void PreMultiplyWithIdentityReturnsSame()
         {
             var v = new Vector3(1, 2, 3);
-            
+
             Assert.That(v, Is.EqualTo(Matrix4x4.Identity.PreMultiply(v)));
         }
-        
+
         [TestCase]
         public void PostMultiplyWithIdentityReturnsSame()
         {
             var v = new Vector3(1, 2, 3);
-            
+
             Assert.That(v, Is.EqualTo(Matrix4x4.Identity.PostMultiply(v)));
         }
 
@@ -57,12 +58,27 @@ namespace Veldrid.SceneGraph.Tests
 
             var v1 = m.PreMultiply(v);
             var v2 = inv.PostMultiply(v);
-            
+
             Assert.That(v1, Is.EqualTo(v2));
         }
 
         [TestCase]
-        public void PreMultiplySameAsTransform()
+        public void PreMultiplyNotSameAsTransformIfScaled()
+        {
+            var m = Matrix4x4.CreateRotationX(0.56f);
+            m.M34 = -1;
+            m.M43 = 40;
+            m.M44 = 41;
+            var v = new Vector3(1, 2, 3);
+
+            var v1 = m.PreMultiply(v);
+            var v2 = Vector3.Transform(v, m);
+
+            Assert.That(v1, Is.Not.EqualTo(v2));
+        }
+
+        [TestCase]
+        public void PreMultiplySameAsTransformIfNoScale()
         {
             var m = Matrix4x4.CreateRotationX(0.56f);
             var v = new Vector3(1, 2, 3);
@@ -80,7 +96,7 @@ namespace Veldrid.SceneGraph.Tests
             s.Push(1);
             s.Push(2);
             s.Push(3);
-            
+
             Assert.That(1, Is.EqualTo(s.Last()));
             Assert.That(3, Is.EqualTo(s.First()));
             Assert.That(3, Is.EqualTo(s.Peek()));

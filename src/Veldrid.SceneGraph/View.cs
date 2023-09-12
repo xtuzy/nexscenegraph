@@ -1,5 +1,5 @@
 ﻿//
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2021 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,32 +14,39 @@
 // limitations under the License.
 //
 
-using System;
-
 namespace Veldrid.SceneGraph
 {
-    public class View : IView
+    public interface IView
     {
-        public ICamera Camera { get; set; }
+        void SetCamera(ICamera camera);
+    }
 
-        public static IView Create()
+    public abstract class View : IView
+    {
+        protected View(uint width, uint height, float distance)
         {
-            return new View();
+            Camera = PerspectiveCameraOperations.CreatePerspectiveCamera(width, height, distance);
+            Camera.SetViewport(0, 0, (int) width, (int) height);
+            Camera.SetView(this);
         }
-        
-        protected View()
+
+        public ICamera Camera { get; private set; }
+
+        public virtual void SetCamera(ICamera newCamera)
         {
-            Camera = Veldrid.SceneGraph.Camera.Create(DisplaySettings.Instance.ScreenWidth, DisplaySettings.Instance.ScreenHeight);
-            Camera.View = this;
+            if (null != Camera)
+            {
+                var viewport = Camera.Viewport;
+                newCamera.SetViewport(viewport);
+            }
+            else
+            {
+                newCamera.SetViewport(0, 0, (int) DisplaySettings.Instance(this).ScreenWidth,
+                    (int) DisplaySettings.Instance(this).ScreenHeight);
+            }
 
-            var height = DisplaySettings.Instance.ScreenHeight;
-            var width = DisplaySettings.Instance.ScreenWidth;
-            var dist = DisplaySettings.Instance.ScreenDistance;
-            
-            // TODO: This is tricky - need to fix when ViewAll implemented
-            var vfov = (float) Math.Atan2(height / 2.0f, dist) * 2.0f; 
-
-            Camera.SetProjectionMatrixAsPerspective(vfov, width / height, 0.1f, 100f);
+            newCamera.SetView(this);
+            Camera = newCamera;
         }
     }
 }

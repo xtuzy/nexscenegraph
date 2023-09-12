@@ -1,8 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>Library</OutputType>
-        <TargetFramework>net48</TargetFramework>
+        <TargetFrameworks>net48;net6.0-windows</TargetFrameworks>
+        <LangVersion>8.0</LangVersion>
         <UseWPF>true</UseWPF>
+    </PropertyGroup>
+    <PropertyGroup>
+        <VersionPrefix>0.4.7</VersionPrefix>
+        <VersionSuffix>alpha</VersionSuffix>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Veldrid.SceneGraph\Veldrid.SceneGraph.csproj" />

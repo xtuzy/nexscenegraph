@@ -1,5 +1,5 @@
 //
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2021 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,12 +18,7 @@ namespace Veldrid.SceneGraph.Util
 {
     public class UpdateVisitor : NodeVisitor, IUpdateVisitor
     {
-        public static IUpdateVisitor Create()
-        {
-            return new UpdateVisitor();
-        }
-        
-        protected UpdateVisitor() : 
+        protected UpdateVisitor() :
             base(VisitorType.UpdateVisitor, TraversalModeType.TraverseAllChildren)
         {
         }
@@ -48,23 +43,32 @@ namespace Veldrid.SceneGraph.Util
             base.Apply(billboard);
         }
 
+        public override void Apply(IDrawable drawable)
+        {
+            base.Apply(drawable);
+        }
+
+        public static IUpdateVisitor Create()
+        {
+            return new UpdateVisitor();
+        }
+
         protected void HandleCallbacks(IPipelineState state)
         {
             // TODO Handle state updates.
         }
-        
+
         protected void HandleCallbacksAndTraverse(INode node)
         {
-            if (node.HasPipelineState)
-            {
-                HandleCallbacks(node.PipelineState);
-            }
+            if (node.HasPipelineState) HandleCallbacks(node.PipelineState);
 
-            var updateCallback = node.GetUpdateCallback();
-            updateCallback?.Invoke(this, node);
-            
-            Traverse(node);
-            
+            var callback = node.GetUpdateCallback();
+            if (null != callback)
+                callback.Run(node, this);
+            else
+                // TODO - this should be:
+                // if(node.GetNumChildrenRequiringUpdateTraversal() > 0) Traverse(node);
+                Traverse(node);
         }
     }
 }

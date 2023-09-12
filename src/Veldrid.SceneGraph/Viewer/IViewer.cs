@@ -1,5 +1,5 @@
 ﻿//
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2021 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,42 +14,33 @@
 // limitations under the License.
 //
 
-using System;
-using System.Dynamic;
-using Veldrid;
-using Veldrid.SceneGraph.InputAdapter;
-
 namespace Veldrid.SceneGraph.Viewer
 {
     public interface IEndFrameEvent
     {
         float FrameTime { get; }
     }
-    
+
     public interface IResizedEvent
     {
         int Width { get; }
         int Height { get; }
     }
-    
-    public interface IViewer
+
+    public interface IViewer : IView
     {
         Platform PlatformType { get; }
 
-        IObservable<IEndFrameEvent> EndFrameEvents { get; }
-        IObservable<IResizedEvent> ResizeEvents { get; }
+        //IObservable<IEndFrameEvent> EndFrameEvents { get; }
+        //IObservable<IResizedEvent> ResizeEvents { get; }
 
         uint Width { get; }
         uint Height { get; }
-
-        IView View { get; }
-
-        void AddInputEventHandler(IInputEventHandler handler);
-        void SetCameraManipulator(ICameraManipulator manipulator);
-        void SetSceneData(IGroup root);
+        void SetBackgroundColor(RgbaFloat color);
         void ViewAll();
-        
+
         void Run();
-        void Run(GraphicsBackend? preferredBackend);
+        void SetCameraOrthographic();
+        void SetCameraPerspective();
     }
 }

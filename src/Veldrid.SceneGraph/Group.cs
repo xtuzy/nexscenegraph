@@ -1,5 +1,5 @@
 //
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2021 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,68 +17,53 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+
 //using Common.Logging;
 
 namespace Veldrid.SceneGraph
 {
+    public interface IGroup : INode
+    {
+        bool AddChild(INode child);
+        bool InsertChild(int index, INode child);
+        bool RemoveChild(INode child);
+        bool RemoveChildren(int pos, int numChildrenToRemove);
+        void ChildInserted(int index);
+        void ChildRemoved(int index, int count);
+        int GetNumChildren();
+        INode GetChild(int index);
+    }
+
     public class Group : Node, IGroup
     {
         protected List<Tuple<INode, bool>> _children = new List<Tuple<INode, bool>>();
 
         //private ILog _logger;
-        
+
         protected Group()
         {
             //_logger = LogManager.GetLogger<Group>();
         }
-
-        public static IGroup Create()
-        {
-            return new Group();
-        }
         
+        public override void Accept(INodeVisitor nv)
+        {
+            if (nv.ValidNodeMask(this))
+            {
+                nv.PushOntoNodePath(this);
+                nv.Apply(this);
+                nv.PopFromNodePath(this);
+            };
+        }
+
         public bool AddChild(INode child)
         {
             return InsertChild(_children.Count, child);
         }
 
-        public virtual bool AddChild(INode child, bool value)
-        {
-            return InsertChild(_children.Count, child, value);
-        }
-
         public bool InsertChild(int index, INode child)
         {
             return InsertChild(index, child, true);
-        }
-
-        public bool InsertChild(int index, INode child, bool value)
-        {
-            if (null == child) return false;
-            
-            if (_children.Exists(x => x.Item1.Id == child.Id))
-            {
-                //_logger.Error(m => m($"Child [{child.Id}] already exists in group!"));
-                return false;
-            }
-
-            if (index >= _children.Count)
-            {
-                index = _children.Count;
-                _children.Add(Tuple.Create(child, value));
-            }
-            else
-            {
-                _children.Insert(index, Tuple.Create(child, value));
-            }
-
-            child.AddParent(this);
-
-            ChildInserted(index);
-            
-            DirtyBound();
-            
-            return true;
         }
 
         public virtual bool RemoveChild(INode child)
@@ -93,10 +78,8 @@ namespace Veldrid.SceneGraph
 
             var endOfRemoveRange = pos + numChildrenToRemove;
             if (endOfRemoveRange > _children.Count)
-            {
                 // TODO add logging
                 endOfRemoveRange = _children.Count;
-            }
 
             for (var i = pos; i < endOfRemoveRange; ++i)
             {
@@ -105,9 +88,9 @@ namespace Veldrid.SceneGraph
             }
 
             _children.RemoveRange(pos, numChildrenToRemove);
-            
+
             ChildRemoved(pos, endOfRemoveRange - pos);
-            
+
             DirtyBound();
 
             return true;
@@ -129,59 +112,100 @@ namespace Veldrid.SceneGraph
             return _children.Count;
         }
 
+        public INode GetChild(int index)
+        {
+            return _children[index].Item1;
+        }
+
         public override void Traverse(INodeVisitor nv)
         {
-            foreach (var child in _children)
-            {
-                child.Item1.Accept(nv);
-            }
+            foreach (var child in _children) child.Item1.Accept(nv);
         }
 
         public override IBoundingSphere ComputeBound()
         {
             var bsphere = BoundingSphere.Create();
-            if (0 == _children.Count)
-            {
-                return bsphere;
-            }
+            if (false == _children.Any()) return bsphere;
 
             // note, special handling of the case when a child is an Transform,
             // such that only Transforms which are relative to their parents coordinates frame (i.e this group)
             // are handled, Transform relative to and absolute reference frame are ignored.
 
             var bb = BoundingBox.Create();
-            foreach(var child in _children)
-            {
-                switch (child.Item1)
+            foreach (var (child, _) in _children)
+                switch (child)
                 {
                     case Transform transform when transform.ReferenceFrame != Transform.ReferenceFrameType.Relative:
                         continue;
-                    case Geode geode:
+                    case IDrawable drawable:
+                        bb.ExpandBy(drawable.GetBoundingBox());
+                        break;
+                    case IGeode geode:
                         bb.ExpandBy(geode.GetBoundingBox());
                         break;
                     default:
-                        var bs = child.Item1.GetBound();
-                        bb.ExpandBy(bs);
+                        bb.ExpandBy(child.GetBound());
                         break;
                 }
-            }
 
-            if (!bb.Valid())
-            {
-                return bsphere;
-            }
+            if (!bb.Valid()) return bsphere;
 
             bsphere.Center = bb.Center;
             bsphere.Radius = 0.0f;
-            foreach(var child in _children)
-            {
-                if (child.Item1 is Transform transform &&
-                    transform.ReferenceFrame != Transform.ReferenceFrameType.Relative) continue;
-                var bs = child.Item1.GetBound();
-                bsphere.ExpandRadiusBy(bs);
-            }
+
+            foreach (var (child, _) in _children)
+                if (!(child is Transform transform) ||
+                    transform.ReferenceFrame == Transform.ReferenceFrameType.Relative)
+                    bsphere.ExpandRadiusBy(child.GetBound());
 
             return bsphere;
+        }
+
+        public static IGroup Create()
+        {
+            return new Group();
+        }
+
+        public virtual bool AddChild(INode child, bool value)
+        {
+            return InsertChild(_children.Count, child, value);
+        }
+
+        public bool InsertChild(int index, INode child, bool value)
+        {
+            ThreadInfo.Instance.AssertRenderingThread();
+            
+            if (null == child) return false;
+
+            if (_children.Exists(x => x.Item1.Id == child.Id))
+                //_logger.Error(m => m($"Child [{child.Id}] already exists in group!"));
+                return false;
+
+            if (index >= _children.Count)
+            {
+                index = _children.Count;
+                _children.Add(Tuple.Create(child, value));
+            }
+            else
+            {
+                _children.Insert(index, Tuple.Create(child, value));
+            }
+
+            child.AddParent(this);
+
+            ChildInserted(index);
+
+            DirtyBound();
+
+            if (child.GetNumChildrenRequiringEventTraversal() > 0 ||
+                null != child.GetEventCallback())
+                SetNumChildrenRequiringEventTraversal(GetNumChildrenRequiringEventTraversal() + 1);
+
+            if (child.GetNumChildrenRequiringUpdateTraversal() > 0 ||
+                null != child.GetUpdateCallback())
+                SetNumChildrenRequiringUpdateTraversal(GetNumChildrenRequiringUpdateTraversal() + 1);
+
+            return true;
         }
     }
 }

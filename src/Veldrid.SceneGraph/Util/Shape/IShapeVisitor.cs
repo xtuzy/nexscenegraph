@@ -1,5 +1,5 @@
 //
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2021 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,10 @@ namespace Veldrid.SceneGraph.Util.Shape
         void Apply(IBox box);
 
         void Apply(ISphere sphere);
+
+        void Apply(ICone cone);
+
+        void Apply(ICylinder cylinder);
 
         void Apply(IPath path);
     }

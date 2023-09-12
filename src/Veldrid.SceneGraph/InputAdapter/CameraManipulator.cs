@@ -1,5 +1,5 @@
 //
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2021 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,124 +15,257 @@
 //
 
 using System;
+using System.Diagnostics;
 using System.Numerics;
+
 //using Common.Logging;
 
 namespace Veldrid.SceneGraph.InputAdapter
 {
-    public abstract class CameraManipulator : InputEventHandler, ICameraManipulator
+    public interface ICameraManipulator : IUiEventHandler
     {
-        protected abstract Matrix4x4 InverseMatrix { get; }
-
-        protected ICamera _camera;
-
-        //private ILog _logger;
+        Matrix4x4 InverseMatrix { get; }
         
+        float ZoomScale { get; }
+        
+        void SetNode(INode node);
+
+        INode GetNode();
+
+        void ViewAll(IUiActionAdapter aa, float slack = 20);
+
+        void UpdateCamera(ICamera camera);
+
+        void SetCameraOrthographic(ICamera camera, IUiActionAdapter aa);
+        void SetCameraPerspective(ICamera camera, IUiActionAdapter aa);
+        
+        void ComputeHomePosition(ICamera camera = null, bool useBoundingBox = false);
+
+        void SetHomePosition(Vector3 eye, Vector3 center, Vector3 up, bool autoComputeHomePosition = false);
+
+        void GetHomePosition(out Vector3 eye, out Vector3 center, out Vector3 up);
+
+        void SetAutoComputeHomePosition(bool flag);
+
+        bool GetAutoComputeHomePosition();
+
+        void Home(IUiActionAdapter aa);
+
+        public interface ICoordinateFrameCallback
+        {
+            Matrix4x4 GetCoordinateFrame(Vector3 position);
+        }
+    }
+
+
+    public abstract class CameraManipulator : UiEventHandler, ICameraManipulator
+    {
+        private bool _autoComputeHomePosition;
+        protected Vector3 _homeCenter;
+
+        protected Vector3 _homeEye;
+        protected Vector3 _homeUp;
+
         protected CameraManipulator()
         {
-            //_logger = LogManager.GetLogger<CameraManipulator>();
+            _autoComputeHomePosition = true;
+
+            _homeEye = -Vector3.UnitY;
+            _homeCenter = Vector3.Zero;
+            _homeUp = Vector3.UnitZ;
         }
 
-        public void SetCamera(ICamera camera)
+        public abstract Matrix4x4 InverseMatrix { get; }
+
+        public abstract float ZoomScale { get; }
+
+        public ICameraManipulator.ICoordinateFrameCallback CoordinateFrameCallback { get; set; } = null;
+
+        public virtual void SetNode(INode node)
         {
-            _camera = camera;
         }
 
-        public void ViewAll()
+        public virtual INode GetNode()
         {
-            ViewAll(20);
+            return null;
         }
 
-        public abstract void ViewAll(float slack);
+        public abstract void ViewAll(IUiActionAdapter aa, float slack = 20);
 
+        public virtual void SetCameraOrthographic(ICamera camera, IUiActionAdapter aa)
+        {
+            var lookDistance = 1f;
+            if (this is TrackballManipulator trackballManipulator)
+            {
+                lookDistance = trackballManipulator.Distance;
+            }
+            
+            OrthographicCameraOperations.ConvertFromPerspectiveToOrthographic(camera);
+            
+            UpdateCameraOrthographic(camera, camera.Viewport.Width, camera.Viewport.Height, lookDistance);
+            
+            ViewAll(aa);
+        }
+
+        public virtual void SetCameraPerspective(ICamera camera, IUiActionAdapter aa)
+        {
+            PerspectiveCameraOperations.ConvertFromOrthographicToPerspective(camera);
+            
+            var fov = PerspectiveCameraOperations.GetVerticalFov(camera);
+            
+            PerspectiveCameraOperations.SetProjectionMatrixAsPerspective(camera, 
+                fov,
+                (float)camera.Viewport.Width / camera.Viewport.Height, 
+                1.0f, 
+                100.0f);
+            
+            ViewAll(aa);
+        }
+
+        protected virtual void UpdateCameraOrthographic(ICamera camera, float width, float height, float dist)
+        {
+            OrthographicCameraOperations.SetProjectionMatrixAsOrthographic(camera, width, height, dist/2,
+                -dist/2);
+            
+            camera.SetViewMatrix(InverseMatrix);
+        }
+        
         // Update a camera
-        public void UpdateCamera()
+        public virtual void UpdateCamera(ICamera camera)
         {
-            _camera.ViewMatrix = InverseMatrix;
-        }
-        
-        public override void HandleInput(IInputStateSnapshot snapshot)
-        {
-            base.HandleInput(snapshot);
-
-            if (InputStateTracker.IsMouseButtonPushed())
+            var inverseMatrix = InverseMatrix;
+            
+            if (camera.Projection == ProjectionMatrixType.Orthographic)
             {
-                HandleMouseButtonPushed();
-            }
+                var currentLookDistance = -camera.ViewMatrix.M43;
+                var newLookDistance = inverseMatrix.M43;
+                
+                if (System.Math.Abs(newLookDistance - currentLookDistance) > 1e-5)
+                {
+                    var aspect = camera.Viewport.AspectRatio;
+                    var height = 1.0f;
+                    if (aspect < 1.0f)
+                    {
+                        height = 2.0f * currentLookDistance / aspect;
+                    }
+                    else
+                    {
+                        height = 2.0f * currentLookDistance;
+                    }
 
-            if (InputStateTracker.IsMouseButtonReleased())
-            {
-                HandleMouseButtonReleased();
+                    var xRadius = height * aspect;
+                    var yRadius = height;
+                    
+                    UpdateCameraOrthographic(camera, xRadius, yRadius, 100*newLookDistance);
+                }
             }
             
-            if (InputStateTracker.IsMouseButtonDown() && InputStateTracker.IsMouseMove())
+            camera.SetViewMatrix(InverseMatrix);
+        }
+
+        public void ComputeHomePosition(ICamera camera, bool useBoundingBox)
+        {
+            if (null == GetNode()) return;
+
+            var boundingSphere = BoundingSphere.Create();
+            if (useBoundingBox)
             {
-                HandleDrag();
-            }
-            
-            else if (InputStateTracker.IsMouseMove())
-            {
-                HandleMouseMove();
-            }
+                var cbVisitor = ComputeBoundsVisitor.Create();
+                GetNode().Accept(cbVisitor);
 
-            if (InputStateTracker.FrameSnapshot.WheelDelta != 0)
-            {
-                HandleWheelDelta();
-            }
-        }
-
-        protected void RequestRedraw()
-        {
-            // TODO: This doesn't really make a request to redraw...
-            UpdateCamera();
-        }
-        
-        protected virtual void HandleDrag()
-        {
-            if (PerformMovement())
-            {
-                RequestRedraw();
-            }
-        }
-
-        protected virtual void HandleMouseMove()
-        {
-            //_logger.Debug(m => m("Move Event!"));
-        }
-
-        protected virtual void HandleMouseButtonPushed()
-        {
-            //_logger.Debug(m => m("Button Pushed!"));
-        }
-
-        protected virtual void HandleMouseButtonReleased()
-        {
-            //_logger.Debug(m => m("Button Released!"));
-        }
-
-        protected virtual void HandleWheelDelta()
-        {
-            //_logger.Debug(m => m("Wheel Delta"));
-        }
-
-        protected virtual bool PerformMovement()
-        {
-            var dx = (InputStateTracker.MousePosition?.X - InputStateTracker.LastMousePosition?.X)/InputStateTracker.FrameSnapshot.WindowWidth;
-            var dy = (InputStateTracker.MousePosition?.Y - InputStateTracker.LastMousePosition?.Y)/InputStateTracker.FrameSnapshot.WindowHeight;
-
-            if (dx == 0 && dy == 0) return false;
-
-            if (InputStateTracker.GetMouseButton(MouseButton.Left))
-            {
-                return PerformMovementLeftMouseButton(dx.Value, dy.Value); 
+                var bb = cbVisitor.GetBoundingBox();
+                if (bb.Valid())
+                    boundingSphere.ExpandBy(bb);
+                else
+                    boundingSphere = GetNode().GetBound();
             }
 
-            return true;
+            else
+            {
+                boundingSphere = GetNode().ComputeBound();
+            }
+
+            Debug.WriteLine($"    boundingSphere.Center= {boundingSphere.Center}");
+            Debug.WriteLine($"    boundingSphere.Radius= {boundingSphere.Radius}");
+
+            var radius = System.Math.Max(boundingSphere.Radius, 1e-6);
+
+            var dist = 3.5f * radius;
+
+            if (null != camera)
+            {
+                float left = 0, right = 0, bottom = 0, top = 0, zNear = 0, zFar = 0;
+                switch (camera.Projection)
+                {
+                    case ProjectionMatrixType.Perspective:
+                        PerspectiveCameraOperations.GetProjectionMatrixAsFrustum(
+                            camera,
+                            ref left, ref right,
+                            ref bottom, ref top,
+                            ref zNear, ref zFar);
+                        break;
+
+                    case ProjectionMatrixType.Orthographic:
+                        OrthographicCameraOperations.GetProjectionMatrixAsOrtho(
+                            camera,
+                            ref left, ref right,
+                            ref bottom, ref top,
+                            ref zNear, ref zFar);
+                        break;
+                    default:
+                        throw new Exception("Unknown Camera type detected");
+                }
+
+                var vertical2 = System.Math.Abs(right - left) / zNear / 2f;
+                var horizontal2 = System.Math.Abs(top - bottom) / zNear / 2f;
+                var dim = horizontal2 < vertical2 ? horizontal2 : vertical2;
+                var viewAngle = System.Math.Atan2(dim, 1f);
+                dist = radius / System.Math.Sin(viewAngle);
+            }
+
+            SetHomePosition(boundingSphere.Center - (float) dist * Vector3.UnitY,
+                boundingSphere.Center,
+                Vector3.UnitZ,
+                _autoComputeHomePosition);
         }
 
-        protected virtual bool PerformMovementLeftMouseButton(float dx, float dy)
+        public void SetHomePosition(Vector3 eye, Vector3 center, Vector3 up, bool autoComputeHomePosition = false)
         {
-            return false;
+            SetAutoComputeHomePosition(autoComputeHomePosition);
+            _homeEye = eye;
+            _homeCenter = center;
+            _homeUp = up;
+        }
+
+        public void GetHomePosition(out Vector3 eye, out Vector3 center, out Vector3 up)
+        {
+            eye = _homeEye;
+            center = _homeCenter;
+            up = _homeUp;
+        }
+
+        public void SetAutoComputeHomePosition(bool flag)
+        {
+            _autoComputeHomePosition = flag;
+        }
+
+        public bool GetAutoComputeHomePosition()
+        {
+            return _autoComputeHomePosition;
+        }
+
+        public virtual void Home(IUiActionAdapter aa)
+        {
+        }
+
+        public Matrix4x4 GetCoordinateFrame(Vector3 position)
+        {
+            return CoordinateFrameCallback?.GetCoordinateFrame(position) ?? Matrix4x4.Identity;
+        }
+
+        public Vector3 GetUpVector(Matrix4x4 coordinateFrame)
+        {
+            return new Vector3(coordinateFrame.M31, coordinateFrame.M32, coordinateFrame.M33);
         }
     }
 }

@@ -1,5 +1,5 @@
 ﻿//
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2021 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +14,18 @@
 // limitations under the License.
 //
 
+using System.Linq;
 using System.Numerics;
 
 namespace Veldrid.SceneGraph
 {
+    public interface ITransformVisitor
+    {
+        Matrix4x4 Matrix { get; }
+
+        void Accumulate(NodePath nodePath);
+    }
+
     public class TransformVisitor : NodeVisitor, ITransformVisitor
     {
         public enum CoordMode
@@ -27,15 +35,10 @@ namespace Veldrid.SceneGraph
         }
 
         private readonly CoordMode _coordMode;
-        private Matrix4x4 _matrix;
         private readonly bool _ignoreCameras;
+        private Matrix4x4 _matrix;
 
-        public static ITransformVisitor Create(Matrix4x4 matrix, CoordMode coordMode, bool ignoreCameras)
-        {
-            return new TransformVisitor(matrix, coordMode, ignoreCameras);
-        }
-        
-        protected TransformVisitor(Matrix4x4 matrix, CoordMode coordMode, bool ignoreCameras) 
+        protected TransformVisitor(Matrix4x4 matrix, CoordMode coordMode, bool ignoreCameras)
             : base(VisitorType.NodeVisitor)
         {
             _matrix = matrix;
@@ -43,45 +46,45 @@ namespace Veldrid.SceneGraph
             _ignoreCameras = ignoreCameras;
         }
 
-        public override void Apply(ITransform transform)
-        {
-            if (_coordMode==CoordMode.LocalToWorld)
-            {
-                transform.ComputeLocalToWorldMatrix(ref _matrix, this);
-            }
-            else // WorldToLocal
-            {
-                transform.ComputeWorldToLocalMatrix(ref _matrix, this);
-            }
-        }
+        public Matrix4x4 Matrix => _matrix;
 
         public void Accumulate(NodePath nodePath)
         {
             if (0 == nodePath.Count) return;
 
+            var i = 0;
             var elt = nodePath.First;
             if (_ignoreCameras)
             {
                 // We need to find the last absolute Camera in NodePath and
                 // set the i index to after it so the final accumulation set ignores it.
                 elt = nodePath.Last;
+                i = nodePath.Count;
                 while (elt != null)
                 {
                     if (elt.Value is Camera camera &&
                         (camera.ReferenceFrame != Transform.ReferenceFrameType.Relative || camera.NumParents == 0))
-                    {
                         break;
-                    }
 
                     elt = elt.Previous;
+                    --i;
                 }
             }
 
-            while (elt != null)
-            {
-                elt.Value.Accept(this);
-                elt = elt.Next;
-            }
+            for (; i < nodePath.Count; ++i) nodePath.ElementAt(i).Accept(this);
+        }
+
+        public static ITransformVisitor Create(Matrix4x4 matrix, CoordMode coordMode, bool ignoreCameras)
+        {
+            return new TransformVisitor(matrix, coordMode, ignoreCameras);
+        }
+
+        public override void Apply(ITransform transform)
+        {
+            if (_coordMode == CoordMode.LocalToWorld)
+                transform.ComputeLocalToWorldMatrix(ref _matrix, this);
+            else // WorldToLocal
+                transform.ComputeWorldToLocalMatrix(ref _matrix, this);
         }
     }
 }

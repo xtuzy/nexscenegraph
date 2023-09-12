@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>netcoreapp2.1</TargetFramework>
+        <TargetFramework>net6.0</TargetFramework>
     </PropertyGroup>
 
     <ItemGroup>
@@ -10,8 +10,6 @@
     </ItemGroup>
     
     <ItemGroup>
-        <ProjectReference Include="..\AssetPrimitives\AssetPrimitives.csproj" />
-        <ProjectReference Include="..\AssetProcessor\AssetProcessor.csproj" />
         <ProjectReference Include="..\Examples.Common\Examples.Common.csproj" />
         <ProjectReference Include="..\Veldrid.SceneGraph\Veldrid.SceneGraph.csproj" />
     </ItemGroup>

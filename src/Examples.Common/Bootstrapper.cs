@@ -1,5 +1,5 @@
 //
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2021 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,14 +14,14 @@
 // limitations under the License.
 //
 
-using Serilog;
-using SharpDX.Win32;
-using Veldrid.SceneGraph.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace Examples.Common
 {
     public static class Bootstrapper
     {
+        public static ILoggerFactory LoggerFactory { get; private set; }
+
         public static void Configure()
         {
             BuildLogger();
@@ -29,15 +29,11 @@ namespace Examples.Common
 
         private static void BuildLogger()
         {
-//            Log.Logger = new LoggerConfiguration()
-//                .Enrich.FromLogContext()
-//                .MinimumLevel.Information()
-//                .WriteTo.ColoredConsole(outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm::ss} [{Level}]: {Message}{NewLine}")
-//                .CreateLogger();
-//
-//            // Assign to Common.Logging adapter.
-//            LogManager.Adapter = new SerilogFactoryAdapter(Log.Logger);
-            
+            LoggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                builder.AddFilter(level => level >= LogLevel.Trace);
+            });
         }
     }
 }

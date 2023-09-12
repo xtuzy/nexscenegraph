@@ -1,5 +1,5 @@
 //
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2019 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,63 +17,78 @@
 using System;
 using System.Linq;
 using System.Numerics;
+using System.Windows.Controls;
+using Examples.Common.Wpf;
 using Veldrid;
 using Veldrid.SceneGraph;
 using Veldrid.SceneGraph.InputAdapter;
 using Veldrid.SceneGraph.Util;
+using IView = Veldrid.SceneGraph.Viewer.IView;
 
 namespace WpfDemo
 {
-    public class PickEventHandler : InputEventHandler
+    public class PickEventHandler : FrameCaptureEventHandler
     {
-        private Veldrid.SceneGraph.Viewer.View _view;
-
-        //private readonly ILogger _logger;
+        private bool _isOrthoGraphic = false;
         
         public PickEventHandler()
         {
-            //_logger = Log.Logger.ForContext("Source", "CullingColoredCubes");
-        }
-
-        public override void SetView(IView view)
-        {
-            var wpfView = view as Veldrid.SceneGraph.Viewer.View;
-            if (null != wpfView)
-            {
-                _view = wpfView;
-            }
         }
         
-        public override void HandleInput(IInputStateSnapshot snapshot)
+        public override bool Handle(IUiEventAdapter eventAdapter, IUiActionAdapter uiActionAdapter)
         {
-            base.HandleInput(snapshot);
-            
-            foreach (var keyEvent in snapshot.KeyEvents)
+            if (true == base.Handle(eventAdapter, uiActionAdapter))
             {
-                if (keyEvent.Down)
-                {
-                    switch (keyEvent.Key)
-                    {
-                        case Key.P:
-                            DoPick(snapshot);
-                            break;
-                    }
-                    
-                }
+                return true;
             }
+            
+            switch (eventAdapter.Key)
+            {
+                case IUiEventAdapter.KeySymbol.KeyP:
+                    DoPick(eventAdapter, uiActionAdapter as Veldrid.SceneGraph.Viewer.IView);
+                    return true;
+                case IUiEventAdapter.KeySymbol.KeyO:
+                    if (!_isOrthoGraphic)
+                    {
+                        var view = uiActionAdapter as Veldrid.SceneGraph.Viewer.IView;
+                        var camera = view.Camera;
+                        var width = camera.Width;
+                        var height = camera.Height;
+                        var dist = camera.Distance;
+                        view.SetCamera(OrthographicCameraOperations.CreateOrthographicCamera(width, height, dist));
+                        _isOrthoGraphic = true;
+                    }
+                    return true;
+                case IUiEventAdapter.KeySymbol.KeyR:
+                    if (_isOrthoGraphic)
+                    {
+                        var view = uiActionAdapter as Veldrid.SceneGraph.Viewer.IView;
+                        var camera = view.Camera;
+                        var width = camera.Width;
+                        var height = camera.Height;
+                        var dist = camera.Distance;
+                        view.SetCamera(PerspectiveCameraOperations.CreatePerspectiveCamera(width, height, dist));
+                        _isOrthoGraphic = false;
+                    }
+                    return true;
+                
+                default:
+                    return false;
+            }
+            
         }
 
-        private void DoPick(IInputStateSnapshot snapshot)
+        private void DoPick(IUiEventAdapter eventAdapter, Veldrid.SceneGraph.Viewer.IView view)
         {
-            var norm = GetNormalizedMousePosition();
+            var norm = new Vector2(eventAdapter.XNormalized, eventAdapter.YNormalized);
             
-            var startPos = _view.Camera.NormalizedScreenToWorld(new Vector3(norm.X, norm.Y, 0.0f)); // Near plane
-            var endPos = _view.Camera.NormalizedScreenToWorld(new Vector3(norm.X, norm.Y, 1.0f)); // Far plane
+            var startPos = view.Camera.NormalizedScreenToWorld(new Vector3(norm.X, norm.Y, 0.0f)); // Near plane
+            var endPos = view.Camera.NormalizedScreenToWorld(new Vector3(norm.X, norm.Y, 1.0f)); // Far plane
             var intersector = LineSegmentIntersector.Create(startPos, endPos);
             
             var intersectionVisitor = IntersectionVisitor.Create(intersector);
             
-            _view.SceneData?.Accept(intersectionVisitor);
+            view.SceneData?.Accept(intersectionVisitor);
 
             if (intersector.Intersections.Any())
             {
@@ -97,4 +112,5 @@ namespace WpfDemo
             }
         }
     }
+    
 }

@@ -55,7 +55,7 @@ namespace Veldrid.SceneGraph.Wpf
                 _sceneData = value;
                 if (null != _view)
                 {
-                    ((Veldrid.SceneGraph.Viewer.View) _view).SceneData = _sceneData;
+                    _view.SetSceneData(_sceneData);
                 }
             }
         }
@@ -68,27 +68,20 @@ namespace Veldrid.SceneGraph.Wpf
             set
             {
                 _cameraManipulator = value;
-                if (null != _view)
-                {
-                    ((Veldrid.SceneGraph.Viewer.View) _view).CameraManipulator = _cameraManipulator;
-                }
+                _view?.SetCameraManipulator(_cameraManipulator);
             }
         }
 
-        private IInputEventHandler _eventHandler;
+        private IUiEventHandler _eventHandler;
 
-        public IInputEventHandler EventHandler
+        public IUiEventHandler EventHandler
         {
             get => _eventHandler;
             set
             {
                 _eventHandler = value;
-                if (null != _view)
-                {
-                    _eventHandler.SetView((Veldrid.SceneGraph.Viewer.View)_view);
-                    ((Veldrid.SceneGraph.Viewer.View) _view).AddInputEventHandler(_eventHandler);
-                }
-                
+                _view?.AddInputEventHandler(_eventHandler);
+
             }
         }
 
@@ -97,9 +90,8 @@ namespace Veldrid.SceneGraph.Wpf
             get => (Veldrid.SceneGraph.Viewer.View)_view;
         }
         
-        public IObservable<IResizedEvent> ResizeEvents => _resizeEvents;
         public IObservable<IEndFrameEvent> EndFrameEvents => _endFrameEvents;
-        public IObservable<IInputStateSnapshot> ViewerInputEvents => _viewerInputEvents;
+        public IObservable<IUiEventAdapter> ViewerInputEvents => _viewerInputEvents;
         
         //private Swapchain _sc;
         //private CommandList _cl;
@@ -107,15 +99,13 @@ namespace Veldrid.SceneGraph.Wpf
 
         private string _windowTitle = string.Empty;
 
-        private ISubject<IResizedEvent> _resizeEvents;
         private ISubject<IEndFrameEvent> _endFrameEvents;
-        private ISubject<IInputStateSnapshot> _viewerInputEvents;
+        private ISubject<IUiEventAdapter> _viewerInputEvents;
         
         private GraphicsDevice _graphicsDevice;
         private DisposeCollectorResourceFactory _factory;
         private Stopwatch _stopwatch = null;
         private double _previousElapsed = 0;
-        private GraphicsBackend _preferredBackend = DisplaySettings.Instance.GraphicsBackend;
         private Veldrid.SceneGraph.Viewer.IView _view;
         private event Action<GraphicsDevice, ResourceFactory> GraphicsDeviceOperations;
         
@@ -129,13 +119,13 @@ namespace Veldrid.SceneGraph.Wpf
         public bool Rendering { get; private set; }
 
         private WpfInputStateSnapshot _inputState;
+        private InputSnapshotAdapter _inputSnapshotAdapter = new InputSnapshotAdapter();
         
         protected override sealed void Initialize()
         {
             // Create Subjects
-            _viewerInputEvents = new Subject<IInputStateSnapshot>();
+            _viewerInputEvents = new Subject<IUiEventAdapter>();
             _endFrameEvents = new Subject<IEndFrameEvent>();
-            _resizeEvents = new Subject<IResizedEvent>();
             _inputState = new WpfInputStateSnapshot();
             
             var options = new GraphicsDeviceOptions(
@@ -150,8 +140,8 @@ namespace Veldrid.SceneGraph.Wpf
             SwapchainSource source = GetSwapchainSource();
             
             double dpiScale = GetDpiScale();
-            uint width = (uint)(ActualWidth < 0 ? 0 : Math.Ceiling(ActualWidth * dpiScale));
-            uint height = (uint)(ActualHeight < 0 ? 0 : Math.Ceiling(ActualHeight * dpiScale));
+            uint width = (uint)(ActualWidth < 0 ? 0 :  System.Math.Ceiling(ActualWidth * dpiScale));
+            uint height = (uint)(ActualHeight < 0 ? 0 :  System.Math.Ceiling(ActualHeight * dpiScale));
 
             SwapchainDescription swapchainDesc = new SwapchainDescription(
                 source,
@@ -167,16 +157,16 @@ namespace Veldrid.SceneGraph.Wpf
             _previousElapsed = _stopwatch.Elapsed.TotalSeconds;
             
             //_cl = _gd.ResourceFactory.CreateCommandList();
+
+            var view = Viewer.View.Create(width, height, 1000.0f);
             
-            DisplaySettings.Instance.ScreenWidth = width;
-            DisplaySettings.Instance.ScreenHeight = height;
-            DisplaySettings.Instance.ScreenDistance = 1000.0f;
+            DisplaySettings.Instance(view).SetScreenWidth(width);
+            DisplaySettings.Instance(view).SetScreenHeight(height);
+            DisplaySettings.Instance(view).SetScreenDistance(1000.0f);
             
-            var view = Veldrid.SceneGraph.Viewer.View.Create(_resizeEvents);
             view.InputEvents = ViewerInputEvents;
-            view.SceneData = _sceneData;
-            view.CameraManipulator = _cameraManipulator;
-            _eventHandler.SetView((Veldrid.SceneGraph.Viewer.View)view);
+            view.SetSceneData(_sceneData);
+            view.SetCameraManipulator(_cameraManipulator);
             view.AddInputEventHandler(_eventHandler);
 
             GraphicsDeviceOperations += view.Camera.Renderer.HandleOperation;
@@ -185,7 +175,7 @@ namespace Veldrid.SceneGraph.Wpf
             
             Rendering = true;
             
-            CameraManipulator.ViewAll();
+            CameraManipulator.ViewAll(_view);
 
             // Left Button
             HwndLButtonDown += OnMouseLButtonDown;
@@ -259,11 +249,18 @@ namespace Veldrid.SceneGraph.Wpf
         private void ProcessEvents()
         {
             double dpiScale = GetDpiScale();
-            int width =  (ActualWidth < 0 ? 0 : (int)Math.Ceiling(ActualWidth * dpiScale));
-            int height = (ActualHeight < 0 ? 0 : (int)Math.Ceiling(ActualHeight * dpiScale));
+            int width =  (ActualWidth < 0 ? 0 : (int) System.Math.Ceiling(ActualWidth * dpiScale));
+            int height = (ActualHeight < 0 ? 0 : (int) System.Math.Ceiling(ActualHeight * dpiScale));
 
-            var inputStateSnap = InputStateSnapshot.Create(_inputState, width, height);
-            _viewerInputEvents.OnNext(inputStateSnap);
+            //var inputStateSnap = InputStateSnapshot.Create(_inputState, width, height, _view.Camera.ProjectionMatrix, _view.Camera.ViewMatrix);
+
+            var eventList = _inputSnapshotAdapter.Adapt(_inputState, width, height);
+            foreach (var evt in eventList)
+            {
+                _viewerInputEvents.OnNext(evt);
+            }
+            
+            
             _inputState.MouseEventList.Clear();
             _inputState.KeyEventList.Clear();
             _inputState.WheelDelta = 0;
@@ -363,22 +360,22 @@ namespace Veldrid.SceneGraph.Wpf
         
         public void ViewAll()
         {
-            ((Veldrid.SceneGraph.Viewer.View)_view).CameraManipulator?.ViewAll();
+            _view.CameraManipulator?.ViewAll(_view);
         }
         
         public void SetSceneData(IGroup root)
         {
-            ((Veldrid.SceneGraph.Viewer.View)_view).SceneData = root;
+            _view.SetSceneData(root);
         }
 
         public void SetCameraManipulator(ICameraManipulator cameraManipulator)
         {
-            ((Veldrid.SceneGraph.Viewer.View)_view).CameraManipulator = cameraManipulator;
+            _view.SetCameraManipulator(cameraManipulator);
         }
 
-        public void AddInputEventHandler(IInputEventHandler handler)
+        public void AddInputEventHandler(IUiEventHandler handler)
         {
-            ((Veldrid.SceneGraph.Viewer.View)_view).AddInputEventHandler(handler);
+            _view.AddInputEventHandler(handler);
         }
 
         protected override sealed void Uninitialize()
@@ -389,7 +386,6 @@ namespace Veldrid.SceneGraph.Wpf
             
             _viewerInputEvents.OnCompleted();
             _endFrameEvents.OnCompleted();
-            _resizeEvents.OnCompleted();
 
             DisposeResources();
         }
@@ -440,12 +436,11 @@ namespace Veldrid.SceneGraph.Wpf
         private void ResizeSwapchain()
         {
             double dpiScale = GetDpiScale();
-            uint width = (uint) (ActualWidth < 0 ? 0 : Math.Ceiling(ActualWidth * dpiScale));
-            uint height = (uint) (ActualHeight < 0 ? 0 : Math.Ceiling(ActualHeight * dpiScale));
+            uint width = (uint) (ActualWidth < 0 ? 0 :  System.Math.Ceiling(ActualWidth * dpiScale));
+            uint height = (uint) (ActualHeight < 0 ? 0 :  System.Math.Ceiling(ActualHeight * dpiScale));
             _graphicsDevice.ResizeMainWindow(width, height);
-            DisplaySettings.Instance.ScreenWidth = width;
-            DisplaySettings.Instance.ScreenHeight = height;
-            _resizeEvents.OnNext(new ResizedEvent((int)width, (int)height));
+            DisplaySettings.Instance(View).SetScreenWidth(width);
+            DisplaySettings.Instance(View).SetScreenHeight(height);
         }
 
         protected virtual void Frame()

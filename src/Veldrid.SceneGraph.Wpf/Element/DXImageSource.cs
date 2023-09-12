@@ -32,7 +32,10 @@ namespace Veldrid.SceneGraph.Wpf.Element
 
 			if (disposing)
 			{
-				SetBackBuffer((SharpDX.Direct3D9.Texture)null);
+				// This is thread-safe, because SharpDX dispose actually 
+				// decrements the reference count on a COM object, which 
+				// is then deleted.
+				m_backBuffer?.Dispose();
 				GC.SuppressFinalize(this);
 			}
 			EndD3D9();
@@ -91,7 +94,7 @@ namespace Veldrid.SceneGraph.Wpf.Element
 					using (Surface surface = texture.GetSurfaceLevel(0))
 					{
 						Lock();
-						SetBackBuffer(D3DResourceType.IDirect3DSurface9, surface.NativePointer);
+						SetBackBuffer(D3DResourceType.IDirect3DSurface9, surface.NativePointer, true);
 						AddDirtyRect(new Int32Rect(0, 0, base.PixelWidth, base.PixelHeight));
 						Unlock();
 					}
@@ -99,7 +102,7 @@ namespace Veldrid.SceneGraph.Wpf.Element
 				else
 				{
 					Lock();
-					SetBackBuffer(D3DResourceType.IDirect3DSurface9, IntPtr.Zero);
+					SetBackBuffer(D3DResourceType.IDirect3DSurface9, IntPtr.Zero, true);
 					AddDirtyRect(new Int32Rect(0, 0, base.PixelWidth, base.PixelHeight));
 					Unlock();
 				}

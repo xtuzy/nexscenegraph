@@ -2,21 +2,33 @@
 
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>8.0</LangVersion>
     </PropertyGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\Veldrid.SceneGraph.IO\Veldrid.SceneGraph.IO.csproj" />
+      <ProjectReference Include="..\Veldrid.SceneGraph.Manipulators\Veldrid.SceneGraph.Manipulators.csproj" />
       <ProjectReference Include="..\Veldrid.SceneGraph\Veldrid.SceneGraph.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Serilog" Version="2.8.0" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="6.0.0" />
+      <PackageReference Include="Serilog" Version="2.10.0" />
       <PackageReference Include="Serilog.Sinks.ColoredConsole" Version="3.0.1" />
-      <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
+      <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>
 
     <ItemGroup>
       <EmbeddedResource Include="Assets\Models\chinesedragon.dae" />
+      <EmbeddedResource Include="Assets\Shaders\TextureVolumeShader-fragment.glsl" />
+      <None Remove="Assets\Shaders\LargeSphereCount-fragment.glsl" />
+      <EmbeddedResource Include="Assets\Shaders\LargeSphereCount-fragment.glsl" />
+      <None Remove="Assets\Shaders\LargeSphereCount-vertex.glsl" />
+      <EmbeddedResource Include="Assets\Shaders\LargeSphereCount-vertex.glsl" />
+      <None Remove="Assets\Shaders\ProceduralVolumeShader-fragment.glsl" />
+      <EmbeddedResource Include="Assets\Shaders\ProceduralVolumeShader-fragment.glsl" />
+      <None Remove="Assets\Shaders\ProceduralVolumeShader-vertex.glsl" />
+      <EmbeddedResource Include="Assets\Shaders\ProceduralVolumeShader-vertex.glsl" />
     </ItemGroup>
 
 </Project>

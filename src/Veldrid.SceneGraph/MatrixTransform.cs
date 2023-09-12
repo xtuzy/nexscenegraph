@@ -1,5 +1,5 @@
 ﻿//
-// Copyright 2018 Sean Spicer 
+// Copyright 2018-2021 Sean Spicer 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,48 +16,48 @@
 
 using System.Numerics;
 using Veldrid.SceneGraph.Util;
-using Veldrid.SceneGraph.Viewer;
 
 namespace Veldrid.SceneGraph
 {
+    public interface IMatrixTransform : ITransform
+    {
+        Matrix4x4 Matrix { get; set; }
+        Matrix4x4 Inverse { get; }
+        void PreMultiply(Matrix4x4 mat);
+        void PostMultiply(Matrix4x4 mat);
+    }
+
     public class MatrixTransform : Transform, IMatrixTransform
     {
-        private Matrix4x4 _matrix = Matrix4x4.Identity;
-
-        public Matrix4x4 Matrix
-        {
-            get => _matrix;
-            private set { 
-                _matrix = value;
-                _inverseDirty = true;
-                DirtyBound();
-            }
-        }
+        private Matrix4x4 _inverse = Matrix4x4.Identity;
 
         private bool _inverseDirty = true;
-        private Matrix4x4 _inverse = Matrix4x4.Identity;
-        public Matrix4x4 Inverse
-        {
-            get
-            {
-                if (_inverseDirty)
-                {
-                    _inverseDirty = !Matrix4x4.Invert(Matrix, out _inverse);
-                    
-                }
-
-                return _inverse;
-            }
-        }
+        private Matrix4x4 _matrix = Matrix4x4.Identity;
 
         protected MatrixTransform(Matrix4x4 matrix)
         {
             Matrix = matrix;
         }
 
-        public static IMatrixTransform Create(Matrix4x4 matrix)
+        public Matrix4x4 Matrix
         {
-            return new MatrixTransform(matrix);
+            get => _matrix;
+            set
+            {
+                _matrix = value;
+                _inverseDirty = true;
+                DirtyBound();
+            }
+        }
+
+        public Matrix4x4 Inverse
+        {
+            get
+            {
+                if (_inverseDirty) _inverseDirty = !Matrix4x4.Invert(Matrix, out _inverse);
+
+                return _inverse;
+            }
         }
 
         public void PreMultiply(Matrix4x4 mat)
@@ -66,39 +66,36 @@ namespace Veldrid.SceneGraph
             _inverseDirty = true;
             DirtyBound();
         }
-        
+
         public void PostMultiply(Matrix4x4 mat)
         {
             _matrix = _matrix.PostMultiply(mat);
             _inverseDirty = true;
             DirtyBound();
         }
-        
+
         public override bool ComputeLocalToWorldMatrix(ref Matrix4x4 matrix, NodeVisitor visitor)
         {
             if (ReferenceFrame == ReferenceFrameType.Relative)
-            {
                 // PreMultiply
                 matrix = matrix.PreMultiply(_matrix);
-            }
             else // absolute
-            {
                 matrix = _matrix;
-            }
             return true;
         }
 
         public override bool ComputeWorldToLocalMatrix(ref Matrix4x4 matrix, NodeVisitor visitor)
         {
             if (ReferenceFrame == ReferenceFrameType.Relative)
-            {
                 matrix = matrix.PostMultiply(Inverse);
-            }
             else // absolute
-            {
                 matrix = Inverse;
-            }
             return true;
+        }
+
+        public static IMatrixTransform Create(Matrix4x4 matrix)
+        {
+            return new MatrixTransform(matrix);
         }
     }
 }
